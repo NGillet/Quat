@@ -21,14 +21,15 @@ class Drawable_object(ABC):
     def __imul__(self, r: "Rotation", update_trasformation_propre: bool = True):
         ### make the rotation_propre move with the object
         ### but only if it NOT 'r' itself a rotation_propre: update_trasformation_propre
-        if update_trasformation_propre:
-            if isinstance(r, Rotation):
+
+        if isinstance(r, Rotation):
+            if update_trasformation_propre:
                 for rp in self._rotation_propre:
                     rp *= r
                 return self
-            return NotImplemented
-        else:
-            pass
+            else:
+                return self
+        return NotImplemented
 
     @abstractmethod
     def __irshift__(self):
@@ -68,12 +69,10 @@ class Groupe_drawable_object:
             self.add_in([obj])
 
     def apply_rotation_propre(self):
-        pass
-        # for obj in self.list_of_obj:
-        #     if len( obj._rotation_propre ):
-        #         for rp in obj._rotation_propre:
-        #             #obj *= rp
-        #             obj.__imul__(rp, update_trasformation_propre=False)
+        for obj in self.list_of_obj:
+            if len(obj._rotation_propre):
+                for rp in obj._rotation_propre:
+                    obj.__imul__(rp, update_trasformation_propre=False)
 
     ### for fun: us add_in
     def __or__(self, obj):
@@ -84,13 +83,17 @@ class Groupe_drawable_object:
         if isinstance(r, Rotation):
             for obj in self.list_of_obj:
                 if len(obj._rotation_propre):
-                    print(
-                        "grp : ",
-                        obj._rotation_propre[0].vect_dir,
-                        "| cercle :",
-                        obj.vecteur_normal,
-                    )
-                obj *= r
+                    # print(
+                    #     "grp : ",
+                    #     obj._rotation_propre[0].vect_dir,
+                    #     "| cercle :",
+                    #     obj.vecteur_normal,
+                    # )
+                    # print(
+                    #     "dif : ",
+                    #     obj._rotation_propre[0].vect_dir - obj.vecteur_normal,
+                    # )
+                    obj *= r
             return self
 
         return NotImplemented
@@ -283,8 +286,6 @@ class Vecteur_obj(Vecteur3D, Drawable_object):
         V = self.v.point  ### np.ndarray (N,3,)
         V = V * np.sign(V[:, 0])[:, None]  ### Vx toward positive X
 
-        f = -S.focal
-
         ### get the point at the minimum distance from the origine
         t_Amin = -np.vecdot(A, V)  ### np.ndarray (N,) Nchanel
         Amin = A + (V * t_Amin[:, None])  ### np.ndarray (N,3,)
@@ -297,12 +298,17 @@ class Vecteur_obj(Vecteur3D, Drawable_object):
             )  ### np.ndarray (N,) => nan when the point is too far
             # tneg = -np.sqrt( S.DoV**2 - d_Amin ) ### np.ndarray (N,)
 
-            inter_pos = Amin + (V.T * tpos).T  ### np.ndarray (N,3,)
-            inter_neg = Amin + (V.T * (-tpos)).T  ### np.ndarray (N,3,)
+            # inter_pos = Amin + (V.T * tpos).T  ### np.ndarray (N,3,)
+            # inter_neg = Amin + (V.T * (-tpos)).T  ### np.ndarray (N,3,)
+
+            inter_pos = Amin + (V * tpos[:, None])  ### np.ndarray (N,3,)
+            inter_neg = Amin + (V * (-tpos[:, None]))  ### np.ndarray (N,3,)
 
             return inter_pos, inter_neg  ### 2x shape (N,3)
 
         else:
+            f = -S.focal
+
             xs_pos = np.full_like(t_Amin, np.inf)  ### np.ndarray (N,) Nchanel
             ys_pos = np.full_like(t_Amin, np.nan)
             zs_pos = np.full_like(t_Amin, np.nan)
@@ -471,7 +477,7 @@ class Vecteur_obj(Vecteur3D, Drawable_object):
         return (
             (abs(ys) <= y_size + eps)
             & (abs(zs) <= z_size + eps)
-            & (dp2 < S.DoV**2)
+            & (dp2 <= S.DoV**2 + eps)
             & (p[:, 0] >= -eps)
         )
 
@@ -581,39 +587,195 @@ class Vecteur_obj(Vecteur3D, Drawable_object):
 
                 mask_4 = mask & between
                 if mask_4.any():
-                    i_pts[0, mask_4] = i_infi_px[mask]
-                    j_pts[0, mask_4] = j_infi_px[mask]
-                    ### can be zero or int1
+                    i_pts[0, mask_4] = i_infi_px[mask_4]
+                    j_pts[0, mask_4] = j_infi_px[mask_4]
+                    ### can be zero or int2
                     mask_41 = mask & neg_inside
                     if mask_41.any():
-                        i_pts[1, mask_41] = i_neg_px[mask_4]
-                        j_pts[1, mask_41] = j_neg_px[mask_4]
+                        i_pts[1, mask_41] = i_neg_px[mask_41]
+                        j_pts[1, mask_41] = j_neg_px[mask_41]
                     mask_41 = mask & ~neg_inside & int2_inside
                     if mask_41.any():
-                        i_pts[1, mask_41] = i_int2_px[mask_4]
-                        j_pts[1, mask_41] = j_int2_px[mask_4]
+                        i_pts[1, mask_41] = i_int2_px[mask_41]
+                        j_pts[1, mask_41] = j_int2_px[mask_41]
+                    mask_41 = mask & ~neg_inside & zero_inside
+                    if mask_41.any():
+                        i_pts[1, mask_41] = i_zero_px[mask_41]
+                        j_pts[1, mask_41] = j_zero_px[mask_41]
 
             ### 4.2) inf is not in : then take the two intersections
-            mask = mask_None & ~infi_inside & int1_inside & int2_inside
+            mask = mask_None & ~infi_inside & int1_inside
             if mask.any():
                 ### check if int1 is inside [OA]
-                ### [OA]
-                v_i = i_a_px - i_o_px  # shape (N,)
-                v_j = j_a_px - j_o_px
+                ### [A-int1]
+                v_i = i_int1_px - i_a_px  ### shape (N,)
+                v_j = j_int1_px - j_a_px
                 ### [O-int1]
-                u_i = i_int1_px - i_o_px  # shape (N,)
+                u_i = i_int1_px - i_o_px  ### shape (N,)
                 u_j = j_int1_px - j_o_px
-                dot = u_i * (u_i - v_i) + u_j * (u_j - v_j)  # shape (N,)
+                dot = u_i * v_i + u_j * v_j  ### shape (N,)
                 between = dot <= 0
 
-                mask_42 = mask & between
+                mask_42 = mask & between & int2_inside
                 if mask_42.any():
                     i_pts[0, mask_42] = i_int1_px[mask_42]
                     j_pts[0, mask_42] = j_int1_px[mask_42]
                     i_pts[1, mask_42] = i_int2_px[mask_42]
                     j_pts[1, mask_42] = j_int2_px[mask_42]
+                mask_42 = mask & between & zero_inside
+                if mask_42.any():
+                    i_pts[0, mask_42] = i_int1_px[mask_42]
+                    j_pts[0, mask_42] = j_int1_px[mask_42]
+                    i_pts[1, mask_42] = i_zero_px[mask_42]
+                    j_pts[1, mask_42] = j_zero_px[mask_42]
+
+        ### make sure to erase not visible segment
+        mask_behind = (p_o[:, 0] < eps) & (p_a[:, 0] < eps)
+        if mask_behind.any():
+            i_pts[0, mask_behind] = np.nan
+            j_pts[0, mask_behind] = np.nan
+            i_pts[1, mask_behind] = np.nan
+            j_pts[1, mask_behind] = np.nan
 
         ### final, remove nan
         mask_draw = ~np.isnan(i_pts) & ~np.isnan(j_pts)  ### shape (2, N)
         mask_draw = mask_draw.all(axis=0)  ### shape (N,)
         return i_pts[:, mask_draw], j_pts[:, mask_draw]
+
+
+class Droite_obj(Vecteur_obj, Drawable_object):
+    def __init__(
+        self,
+        point_arrivee: "Point3D",
+        point_origine: "Point3D" = None,
+    ):
+        super().__init__(point_arrivee, point_origine)
+        self.to_unitaire
+
+    def project_on_screen(
+        self,
+        S: "Screen",
+    ):
+        """
+        A vector is a segment to draw : it has 2 extremity, O (origine) A (arrivee)
+        For the drawing Ax > Ox so the vector Vx>0
+        """
+        ### get all possible points 3D coords
+        ### get if points are in FoV
+        p_infi, p_neg = self.intersection_with_sphere_3D(S)
+        infi_inside = self.flag_in_field_of_view(p_infi, S)
+        neg_inside = self.flag_in_field_of_view(p_neg, S)
+
+        p_int1, p_int2 = self.intersection_with_FoV_3D(S)
+        int1_inside = self.flag_in_field_of_view(p_int1, S)
+        int2_inside = self.flag_in_field_of_view(p_int2, S)
+
+        p_zero = self.intersection_with_screen_3D(S)
+        zero_inside = self.flag_in_field_of_view(p_zero, S)
+        ### get all point px coords
+        i_infi_px, j_infi_px = self.get_coord_on_screen_px(p_infi, S)
+        i_neg_px, j_neg_px = self.get_coord_on_screen_px(p_neg, S)
+        i_int1_px, j_int1_px = self.get_coord_on_screen_px(p_int1, S)
+        i_int2_px, j_int2_px = self.get_coord_on_screen_px(p_int2, S)
+        i_zero_px, j_zero_px = self.get_coord_on_screen_px(p_zero, S)
+
+        ### All outputs start as NaN
+        i_pts = np.full((2, self.shape), np.nan, dtype=float)
+        j_pts = np.full((2, self.shape), np.nan, dtype=float)
+
+        hits = np.zeros(self.shape, dtype=int)
+
+        mask = infi_inside
+        if mask.any():
+            i_pts[hits[mask], mask] = i_infi_px[mask]
+            j_pts[hits[mask], mask] = j_infi_px[mask]
+            hits[mask] += 1
+
+        mask = neg_inside
+        if mask.any():
+            i_pts[hits[mask], mask] = i_neg_px[mask]
+            j_pts[hits[mask], mask] = j_neg_px[mask]
+            hits[mask] += 1
+
+        mask = int1_inside
+        if mask.any():
+            i_pts[hits[mask], mask] = i_int1_px[mask]
+            j_pts[hits[mask], mask] = j_int1_px[mask]
+            hits[mask] += 1
+
+        mask = int2_inside
+        if mask.any():
+            i_pts[hits[mask], mask] = i_int2_px[mask]
+            j_pts[hits[mask], mask] = j_int2_px[mask]
+            hits[mask] += 1
+
+        mask = zero_inside
+        if mask.any():
+            i_pts[hits[mask], mask] = i_zero_px[mask]
+            j_pts[hits[mask], mask] = j_zero_px[mask]
+            hits[mask] += 1
+
+        # print(hits)
+
+        ### final, remove nan
+        mask_draw = ~np.isnan(i_pts) & ~np.isnan(j_pts)  ### shape (2, N)
+        mask_draw = mask_draw.all(axis=0)  ### shape (N,)
+        return i_pts[:, mask_draw], j_pts[:, mask_draw]
+
+
+class Circle_obj(Drawable_object):
+    def __init__(
+        self,
+        vecteur_normal: Vecteur3D,
+        radius: float,
+        Npoints: int = 128,
+    ):
+        super().__init__()
+        self.vecteur_normal = vecteur_normal.to_unitaire
+        self.radius = radius
+
+        self.Npoints = Npoints
+        self.Points = self._build_points_on_circle()
+
+    @property
+    def centre(self):
+        return self.vecteur_normal.po
+
+    def _build_points_on_circle(self):
+        ### defining the rotation
+        angle = 2 * np.pi / self.Npoints
+        rot = Rotation(angle, self.vecteur_normal.copy)
+
+        ### init zeros points
+        xyz = np.zeros([self.Npoints, 3])
+
+        ### get the first point on the circle
+        p = (
+            self.vecteur_normal.copy.orthogonal.unitaire * self.radius
+        ).pa  ### centered on po
+        xyz[0] = p.point
+
+        for i in np.arange(1, self.Npoints):
+            p *= rot
+            xyz[i] = p.point
+
+        return Point_obj(*xyz.T)
+
+    def project_on_screen(self, S: "Screen"):
+        return self.Points.project_on_screen(S)
+
+    def __imul__(
+        self, r: "Rotation", update_trasformation_propre: bool = True
+    ) -> "Circle_obj":
+        super().__imul__(r, update_trasformation_propre=update_trasformation_propre)
+        if isinstance(r, Rotation):
+            self.vecteur_normal *= r
+            self.Points *= r
+            return self
+        return NotImplemented
+
+    def __irshift__(self, v: "Vecteur3D") -> "Groupe_drawable_object":
+        if isinstance(v, Vecteur3D):
+            self.vecteur_normal >>= v
+            self.Points >>= v
+            return self
