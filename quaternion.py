@@ -311,7 +311,7 @@ class Vecteur3D:
 
     @property
     def copy(self) -> "Vecteur3D":
-        return self.__class__(self.pa, self.po)
+        return self.__class__(self.pa.copy, self.po.copy)
 
     @property
     def orthogonal(self):
@@ -485,10 +485,9 @@ class Rotation:
 
         return NotImplemented
 
-    # def __irshift__(self, v: "Vecteur3D"):
-    #     if isinstance(v, Vecteur3D):
-    #         self.origine += v
-    #         self.vect_dir += v
-    #         return self
+    def __irshift__(self, v: "Vecteur3D"):
+        if isinstance(v, Vecteur3D):
+            self.vect_dir >>= v
+            return self
 
-    #     return NotImplemented
+        return NotImplemented

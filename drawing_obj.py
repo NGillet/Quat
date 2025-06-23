@@ -21,7 +21,6 @@ class Drawable_object(ABC):
     def __imul__(self, r: "Rotation", update_trasformation_propre: bool = True):
         ### make the rotation_propre move with the object
         ### but only if it NOT 'r' itself a rotation_propre: update_trasformation_propre
-
         if isinstance(r, Rotation):
             if update_trasformation_propre:
                 for rp in self._rotation_propre:
@@ -32,17 +31,19 @@ class Drawable_object(ABC):
         return NotImplemented
 
     @abstractmethod
-    def __irshift__(self):
-        pass
+    def __irshift__(self, v: "Vecteur3D", update_trasformation_propre: bool = True):
+        if isinstance(v, Vecteur3D):
+            if update_trasformation_propre:
+                for rp in self._rotation_propre:
+                    rp >>= v
+                return self
+            else:
+                return self
+        return NotImplemented
 
     def add_rot(self, r: "Rotation"):
         if isinstance(r, Rotation):
             self._rotation_propre.append(r)
-
-    # def __repr__(self):
-    #     return (
-    #         f"{self.__class__.__name__}(rotation_propre={len(self._rotation_propre)})"
-    #     )
 
 
 class Groupe_drawable_object:
@@ -74,26 +75,15 @@ class Groupe_drawable_object:
                 for rp in obj._rotation_propre:
                     obj.__imul__(rp, update_trasformation_propre=False)
 
-    ### for fun: us add_in
     def __or__(self, obj):
+        ### for fun: us add_in
         self.list_of_obj.append(obj)
         return self
 
     def __imul__(self, r: "Rotation") -> "Groupe_drawable_object":
         if isinstance(r, Rotation):
             for obj in self.list_of_obj:
-                if len(obj._rotation_propre):
-                    # print(
-                    #     "grp : ",
-                    #     obj._rotation_propre[0].vect_dir,
-                    #     "| cercle :",
-                    #     obj.vecteur_normal,
-                    # )
-                    # print(
-                    #     "dif : ",
-                    #     obj._rotation_propre[0].vect_dir - obj.vecteur_normal,
-                    # )
-                    obj *= r
+                obj *= r
             return self
 
         return NotImplemented
@@ -774,8 +764,12 @@ class Circle_obj(Drawable_object):
             return self
         return NotImplemented
 
-    def __irshift__(self, v: "Vecteur3D") -> "Groupe_drawable_object":
+    def __irshift__(
+        self, v: "Vecteur3D", update_trasformation_propre: bool = True
+    ) -> "Groupe_drawable_object":
+        super().__irshift__(v, update_trasformation_propre=update_trasformation_propre)
         if isinstance(v, Vecteur3D):
             self.vecteur_normal >>= v
             self.Points >>= v
             return self
+        return NotImplemented
