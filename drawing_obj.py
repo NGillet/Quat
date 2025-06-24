@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+import healpy as hp
 import numpy as np
 
 from quaternion import Point3D, Rotation, Vecteur3D, eps
@@ -731,7 +732,7 @@ class Circle_obj(Drawable_object):
     def centre(self):
         return self.vecteur_normal.po
 
-    def _build_points_on_circle(self):
+    def _build_points_on_circle(self) -> Point_obj:
         ### defining the rotation
         angle = 2 * np.pi / self.Npoints
         rot = Rotation(angle, self.vecteur_normal.copy)
@@ -750,6 +751,133 @@ class Circle_obj(Drawable_object):
             xyz[i] = p.point
 
         return Point_obj(*xyz.T)
+
+    def project_on_screen(self, S: "Screen"):
+        return self.Points.project_on_screen(S)
+
+    def __imul__(
+        self, r: "Rotation", update_trasformation_propre: bool = True
+    ) -> "Circle_obj":
+        super().__imul__(r, update_trasformation_propre=update_trasformation_propre)
+        if isinstance(r, Rotation):
+            self.vecteur_normal *= r
+            self.Points *= r
+            return self
+        return NotImplemented
+
+    def __irshift__(
+        self, v: "Vecteur3D", update_trasformation_propre: bool = True
+    ) -> "Groupe_drawable_object":
+        super().__irshift__(v, update_trasformation_propre=update_trasformation_propre)
+        if isinstance(v, Vecteur3D):
+            self.vecteur_normal >>= v
+            self.Points >>= v
+            return self
+        return NotImplemented
+
+
+class Sphere_obj(Drawable_object):
+    def __init__(self, centre: "Point3D", rayon: float, Npoints: int = 128):
+        super().__init__()
+        self.centre = centre
+        self.rayon = rayon
+        self.Npoints_wanted = Npoints
+
+        self.Points = self._sphere_points_healpix()
+
+    def _sphere_points_healpix(self) -> Point_obj:
+        """
+        Return ≳num_points points on the sphere of radius R, using Healpix pixel centers.
+        The actual number will be npix = 12 * nside^2, where nside is chosen so that
+        12*nside^2 is closest to num_points (nside is rounded to a power of two).
+
+        Returns
+        -------
+        pts : ndarray, shape (npix, 3)
+            Cartesian coordinates (x,y,z) of each point.
+        """
+        ### heapy params
+        ### Np ~ Npix = 12* Nside**2
+        approx_Npoints = np.sqrt(self.Npoints_wanted / 12.0)
+        ### round to nearest power of two (minimum 1)
+        if approx_Npoints < 1:
+            nside = 1
+        else:
+            nside = 2 ** int(np.round(np.log2(approx_Npoints)))
+        self.Npoints = hp.nside2npix(nside)  ### npix
+
+        ### pix2vec -> tuple of (x-array, y-array, z-array)
+        xyz = np.stack(
+            hp.pix2vec(nside, np.arange(self.Npoints)), axis=1
+        )  ### np.ndarray, shape (npix,3)
+        xyz *= self.rayon
+        print(xyz.shape)
+
+        return Point_obj(*(Point3D(*xyz.T) + self.centre).point.T)
+
+    def project_on_screen(self, S: "Screen"):
+        return self.Points.project_on_screen(S)
+
+    def __imul__(self, r: "Rotation", update_trasformation_propre: bool = True):
+        super().__imul__(r, update_trasformation_propre=update_trasformation_propre)
+        if isinstance(r, Rotation):
+            self.centre *= r
+            self.Points *= r
+            return self
+        return NotImplemented
+
+    def __irshift__(
+        self, v: "Vecteur3D", update_trasformation_propre: bool = True
+    ) -> "Groupe_drawable_object":
+        super().__irshift__(v, update_trasformation_propre=update_trasformation_propre)
+        if isinstance(v, Vecteur3D):
+            self.centre >>= v
+            self.Points >>= v
+            return self
+
+        return NotImplemented
+
+
+class Tore_obj(Drawable_object):
+    def __init__(
+        self,
+        vecteur_normal: Vecteur3D,
+        grand_rayon: float,
+        petit_rayon: float,
+        Npoints: int = 32,
+    ):
+        super().__init__()
+        self.vecteur_normal = vecteur_normal.to_unitaire
+        self.grand_rayon = grand_rayon
+        self.petit_rayon = petit_rayon
+
+        self.Npoints = Npoints
+        self.Points = self._build_points_on_tore()
+
+    @property
+    def centre(self):
+        return self.vecteur_normal.po
+
+    def _build_points_on_tore(self) -> Point_obj:
+        grand_cercle = Circle_obj(
+            self.vecteur_normal.copy, self.grand_rayon, self.Npoints
+        )
+        for c in grand_cercle.Points:
+            v_norm = self.vecteur_normal.copy
+            v_rayon = Vecteur3D(c, self.centre.copy).to_unitaire
+            v_cross = (v_rayon ^ v_norm).to_unitaire
+
+            v = Vecteur3D(c + v_cross.v, c)
+            petit_cercle = Circle_obj(v, self.petit_rayon, self.Npoints)
+
+            try:  ### funny way to initialize Points
+                _ = Points
+            except NameError:
+                Points = petit_cercle.Points
+            else:
+                Points = Points | petit_cercle.Points
+
+        return Points
 
     def project_on_screen(self, S: "Screen"):
         return self.Points.project_on_screen(S)

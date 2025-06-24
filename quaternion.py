@@ -438,6 +438,11 @@ class Vecteur3D:
         """
         return (-1) * super().__mul__(q).w
 
+    def __xor__(self, other: "Vecteur3D") -> "Vecteur3D":
+        cross_pts = np.cross(self.v, other.v)  ### shape (N,3)
+        new_pa = self.po + Point3D(*cross_pts.T)
+        return Vecteur3D(new_pa, point_origine=self.po)
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(x={self.v.x.tolist()}, y={self.v.y.tolist()}, z={self.v.z.tolist()})"
 
