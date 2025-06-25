@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 
 import healpy as hp
 import numpy as np
+import pygame
 
 from quaternion import Point3D, Rotation, Vecteur3D, eps
 
@@ -901,3 +902,32 @@ class Tore_obj(Drawable_object):
             self.Points >>= v
             return self
         return NotImplemented
+
+
+class Ellipse_pygame:
+    def __init__(
+        self,
+        vecteur_normal: Vecteur3D,
+        grand_rayon: float,
+    ):
+        self.vecteur_normal = vecteur_normal.to_unitaire
+        self.grand_rayon = grand_rayon
+
+    @property
+    def angle_x(self):
+        return self.vecteur_normal % Vecteur3D(Point3D(1, 0, 0))
+
+    @property
+    def angle_y(self):
+        return self.vecteur_normal % Vecteur3D(Point3D(0, 1, 0))
+
+    def draw_ellipse_angle(surface, color, rect, angle, width=0):
+        """
+        width=0 : color the interior
+        """
+
+        target_rect = pygame.Rect(rect)
+        shape_surf = pygame.Surface(target_rect.size, pygame.SRCALPHA)
+        pygame.draw.ellipse(shape_surf, color, (0, 0, *target_rect.size), width)
+        rotated_surf = pygame.transform.rotate(shape_surf, angle)
+        surface.blit(rotated_surf, rotated_surf.get_rect(center=target_rect.center))

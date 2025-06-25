@@ -436,9 +436,16 @@ class Vecteur3D:
         """
         Dot product of vectors
         """
-        return (-1) * super().__mul__(q).w
+        result = np.sum(self.v.point * q.v.point, axis=1)
+        return result
+
+    def __mod__(self, other: "Vecteur3D") -> np.ndarray | float:
+        return np.arccos(self.unitaire @ other.unitaire)
 
     def __xor__(self, other: "Vecteur3D") -> "Vecteur3D":
+        """
+        cross product
+        """
         cross_pts = np.cross(self.v, other.v)  ### shape (N,3)
         new_pa = self.po + Point3D(*cross_pts.T)
         return Vecteur3D(new_pa, point_origine=self.po)
