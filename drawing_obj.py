@@ -4,7 +4,7 @@ import healpy as hp
 import numpy as np
 import pygame
 
-from quaternion import Point3D, Rotation, Vecteur3D, eps
+from quaternion import Point3D, Rotation, Triangle3D, Vecteur3D, eps
 
 
 class Drawable_object(ABC):
@@ -161,11 +161,6 @@ class Point_obj(Point3D, Drawable_object):
     def __irshift__(self, v) -> "Point_obj":
         super().__irshift__(v)
         return self
-
-    # def __repr__(self) -> str:
-    #     return (
-    #         f"Point_obj(x={self.x.tolist()}, y={self.y.tolist()}, z={self.z.tolist()})"
-    #     )
 
     def get_coord_on_screen(self, S: "Screen"):
         f = -S.focal
@@ -777,6 +772,25 @@ class Circle_obj(Drawable_object):
         return NotImplemented
 
 
+class Triangle_obj(Triangle3D, Drawable_object):
+    def __init__(
+        self,
+        Points_3: "Point3D",
+    ):
+        super().__init__(Points_3)
+
+    def project_on_screen(self, S: "Screen"):
+        return self.tri_points.project_on_screen(S)
+
+    def __imul__(self, r):
+        super().__imul__(r)
+        return self
+
+    def __irshift__(self, v):
+        super().__imul__(v)
+        return self
+
+
 class Sphere_obj(Drawable_object):
     def __init__(self, centre: "Point3D", rayon: float, Npoints: int = 128):
         super().__init__()
@@ -812,9 +826,36 @@ class Sphere_obj(Drawable_object):
             hp.pix2vec(nside, np.arange(self.Npoints)), axis=1
         )  ### np.ndarray, shape (npix,3)
         xyz *= self.rayon
-        print(xyz.shape)
 
-        return Point_obj(*(Point3D(*xyz.T) + self.centre).point.T)
+        bnd = hp.boundaries(
+            nside, np.arange(self.Npoints), step=1
+        ).T  ### shape (4,3,Npoints)
+
+        # tri = (
+        #     np.concatenate([bnd[[0, 1, 3]], bnd[[1, 2, 3]]])
+        #     .swapaxes(1, 2)
+        #     .reshape(-1, 3)
+        # ) * self.rayon  ### shape (Npoints,3)
+
+        ### shape (4,3,Npoints)
+        ### shape (6,3,Npoints)
+        ### shape (6,Npoints,3)
+        ### shape (Npoints,6,3)
+        ### shape (Npoints*6,3)
+        tri = (
+            np.concatenate([bnd[[0, 1, 3]], bnd[[1, 2, 3]]])
+            .swapaxes(1, 2)
+            .swapaxes(0, 1)
+        ).reshape(-1, 3)
+        tri *= self.rayon
+
+        Points = Point_obj(*tri.T) + self.centre
+        self.Triangles = Triangle_obj(Points)
+        ### Point_obj(*(Point3D(*xyz.T) + self.centre).point.T)
+        return Points
+
+    def project_on_screen_surface(self, S: "Screen"):
+        return self.Triangles.project_on_screen(S)
 
     def project_on_screen(self, S: "Screen"):
         return self.Points.project_on_screen(S)

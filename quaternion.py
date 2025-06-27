@@ -503,3 +503,46 @@ class Rotation:
             return self
 
         return NotImplemented
+
+
+class Triangle3D:
+    def __init__(
+        self,
+        Points_3: "Point3D",
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        assert not (Points_3.shape % 3)
+
+        self.tri_points = Points_3
+
+    @property
+    def shape(self):
+        return self.tri_points.shape // 3
+
+    @property
+    def centre(self):
+        ### compute mean 3 by 3
+        return Point3D(*np.reshape(self.tri_points, [-1, 3, self.shape]).mean(axis=1))
+
+    @property
+    def normal(self):
+        v1 = Vecteur3D(self.tri_points[::3], self.centre).to_unitaire
+        v2 = Vecteur3D(self.tri_points[1::3], self.centre).to_unitaire
+        return (v1 ^ v2).to_unitaire
+
+    def __getitem__(self, key):
+        return self.__class__(self.tri_points[key * 3 : (key + 1) * 3])
+
+    def __imul__(self, r) -> "Vecteur3D":
+        if hasattr(r, "rot_quat_form"):
+            self.tri_points *= r
+            return self
+        return NotImplemented
+
+    def __irshift__(self, v):
+        if isinstance(v, Vecteur3D):
+            self.tri_points >>= v.v
+            return self
+        return NotImplemented
